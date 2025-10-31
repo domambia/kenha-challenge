@@ -57,6 +57,9 @@ All services share a common `.env.example` pattern and leverage Docker for local
 - `notifications`: SMS/email/push adapters
 - `analytics`: ETL jobs, data warehouse connectors
 - `accounts`: RBAC, OAuth/OIDC, reporter reputation scoring
+- `iot_integration`: KeNHA system adapters (RFID, CCTV, sensors)
+- `validation`: Multi-source incident validation service
+- `timeseries`: Time-series data storage for sensor/RFID logs
 
 ### 2.4 API Surface
 - REST endpoints for incident submission, evidence, assignments, responder status

@@ -273,22 +273,142 @@ Primary personas include: Road User Reporter, KeNHA Dispatcher, Emergency Respon
 - **Admin Web App:** Next.js + TypeScript, Tailwind UI, Mapbox/Leaflet, Redux Toolkit state.
 - **Backend:** Django + Django REST Framework, PostgreSQL with PostGIS, Redis cache, Celery workers, WebSocket server for live updates.
 - **AI Microservices:** Python-based models (FastAPI) for computer vision and deduplication, orchestrated via message queues.
+- **IoT Integration Layer:** Python microservices for KeNHA system integration (RFID, CCTV, sensors) with protocol adapters (MQTT, REST, gRPC).
 - **Blockchain Integration:** Node.js or Python service interacting with Base smart contracts through relayers; uses ethers.js/web3.py for signing and verification.
 - **Observability Stack:** Prometheus, Grafana, ELK/Opensearch, Sentry for error tracking.
 
-### 6.2 Data Flow Highlights
-1. Reporter submits incident → Django API validates, stores metadata, queues AI tasks.  
-2. AI results update incident record; hashed payload sent to blockchain integration service.  
-3. Relayer signs and submits Base transaction covering gas via sponsored meta-transaction; transaction receipt stored in backend.  
-4. Dispatcher actions trigger updates, notifications, and additional blockchain checkpoints.  
-5. Analytics pipelines aggregate data into dashboards and external reports.  
+### 6.2 KeNHA System Integration Architecture
 
-### 6.3 Security & Privacy
+#### 6.2.1 RFID Reader Integration
+- **Purpose:** Vehicle identification and movement tracking for incident validation
+- **Integration Method:**
+  - Real-time data ingestion via MQTT or REST API from KeNHA RFID infrastructure
+  - Vehicle registration number correlation with incident reports
+  - Temporal-spatial matching: verify reported vehicles were present at incident location/time
+  - Privacy-preserving: hash vehicle identifiers before correlation
+- **Data Flow:**
+  1. RFID readers capture vehicle tags at highway checkpoints
+  2. Data streamed to KeNHA middleware → eSafety IoT adapter
+  3. Normalized and stored in time-series database (TimescaleDB extension)
+  4. Incident validation service queries RFID logs for correlation
+  5. Confidence score calculated based on RFID proximity and timing
+- **Use Cases:**
+  - Validate vehicle presence at accident scene
+  - Identify hit-and-run vehicles
+  - Track vehicle movement patterns for investigation
+  - Verify commercial vehicle compliance
+
+#### 6.2.2 CCTV Camera Integration
+- **Purpose:** Visual verification of reported incidents using existing KeNHA surveillance network
+- **Integration Method:**
+  - API integration with KeNHA CCTV management system
+  - Automatic camera feed retrieval based on incident GPS coordinates
+  - Computer vision analysis of video footage for incident detection
+  - Manual review interface for dispatchers
+- **Data Flow:**
+  1. Incident reported with GPS coordinates
+  2. System identifies nearest CCTV cameras (±500m radius)
+  3. Retrieves video feed for incident time window (±5 minutes)
+  4. AI analyzes footage for incident validation (accident, obstruction, traffic violation)
+  5. Dispatcher can manually review feeds in admin console
+  6. Validated footage clips stored as evidence with blockchain hash
+- **Technical Specifications:**
+  - Support for RTSP, ONVIF protocols
+  - Video storage: H.264/H.265 encoded, 30-day retention for validation clips
+  - AI inference: YOLOv8 or similar for object detection, incident classification
+  - Privacy: Automatic face and license plate blurring (configurable)
+- **Use Cases:**
+  - Visual confirmation of accidents and hazards
+  - Detect unreported incidents automatically
+  - Investigate false reports and spam
+  - Traffic flow analysis and congestion monitoring
+
+#### 6.2.3 Sensor Integration (Weather, Traffic, Road Conditions)
+- **Purpose:** Multi-sensor data correlation for incident validation and predictive safety
+- **Sensor Types:**
+  - **Traffic Flow Sensors:** Inductive loops, radar sensors measuring vehicle count, speed, occupancy
+  - **Weather Sensors:** Temperature, humidity, precipitation, visibility, wind speed
+  - **Road Surface Sensors:** Temperature, moisture, ice detection
+  - **Air Quality Sensors:** Pollutant levels affecting visibility
+  - **Vibration Sensors:** Detect infrastructure damage, landslides
+- **Integration Method:**
+  - MQTT or CoAP protocols for real-time sensor data ingestion
+  - Edge computing nodes aggregate sensor data before transmission
+  - Time-series database storage (InfluxDB or TimescaleDB) for historical analysis
+- **Data Flow:**
+  1. Sensors continuously transmit data to KeNHA data aggregation points
+  2. eSafety platform subscribes to sensor data streams
+  3. Real-time correlation engine matches sensor anomalies with incident reports
+  4. Validation confidence score includes sensor data correlation
+  5. Predictive models use sensor data for hazard forecasting
+- **Validation Logic:**
+  - Traffic flow anomalies → validate congestion/accident reports
+  - Weather sensor data → validate weather-related incident claims
+  - Road surface conditions → correlate with infrastructure damage reports
+  - Vibration spikes → validate infrastructure damage or landslides
+
+#### 6.2.4 Integration Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         KeNHA Existing Infrastructure                     │
+├─────────────────┬─────────────────┬─────────────────┬───────────────────┤
+│  RFID Readers   │   CCTV Cameras  │  Traffic Sensors │  Weather Sensors │
+│  (Highway       │   (Surveillance │  (Flow/Speed)    │  (Temp/Rain)     │
+│   Checkpoints)  │   Network)      │                  │                   │
+└────────┬────────┴────────┬─────────┴────────┬─────────┴────────┬────────┘
+         │                 │                    │                   │
+         │ MQTT/REST       │ ONVIF/RTSP         │ MQTT/CoAP         │ MQTT
+         │                 │                    │                   │
+┌────────▼─────────────────▼────────────────────▼───────────────────▼──────┐
+│              eSafety IoT Integration Layer (Django Microservices)         │
+├──────────────────────────────────────────────────────────────────────────┤
+│  • RFID Adapter Service    • CCTV Integration Service                    │
+│  • Sensor Data Ingestion   • Protocol Converters (MQTT/CoAP/REST/gRPC)   │
+│  • Data Normalization      • Real-time Stream Processing                 │
+└────────────────────────┬─────────────────────────────────────────────────┘
+                         │
+                         │ Message Queue (Redis/Celery)
+                         │
+┌────────────────────────▼─────────────────────────────────────────────────┐
+│                   Incident Validation Service                             │
+├──────────────────────────────────────────────────────────────────────────┤
+│  • Multi-source correlation engine                                       │
+│  • Confidence scoring algorithm                                           │
+│  • Temporal-spatial matching                                              │
+│  • AI-powered anomaly detection                                           │
+└────────────────────────┬─────────────────────────────────────────────────┘
+                         │
+                         │ Validated Incident Data
+                         │
+┌────────────────────────▼─────────────────────────────────────────────────┐
+│                    eSafety Core Platform                                  │
+│  (Django Backend, PostgreSQL/PostGIS, Blockchain Integration)             │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+### 6.3 Data Flow Highlights
+1. Reporter submits incident → Django API validates, stores metadata, queues AI tasks.  
+2. **IoT Integration:** Incident triggers multi-source validation query (RFID, CCTV, sensors)  
+3. **Validation Service:** Correlates citizen report with sensor data, calculates confidence score  
+4. AI results update incident record; hashed payload sent to blockchain integration service.  
+5. Relayer signs and submits Base transaction covering gas via sponsored meta-transaction; transaction receipt stored in backend.  
+6. Dispatcher receives validated incident with confidence score and sensor correlation evidence  
+7. Dispatcher actions trigger updates, notifications, and additional blockchain checkpoints.  
+8. Analytics pipelines aggregate data into dashboards and external reports.  
+
+### 6.4 Security & Privacy
 - TLS 1.3 everywhere, AES-256 encryption at rest, Vault/KMS for secrets.  
 - MFA for privileged accounts, OAuth2/OIDC integration.  
 - Immutable audit logs with tamper detection.  
 - Compliance with Kenya Data Protection Act & GDPR (data minimization, consent management, right-to-be-forgotten processes).  
-- Privacy-preserving techniques: PII stored off-chain, zero-knowledge proof exploration for future phases.  
+- Privacy-preserving techniques: PII stored off-chain, zero-knowledge proof exploration for future phases.
+- **IoT Integration Security:**
+  - Mutual TLS (mTLS) for all KeNHA system connections
+  - API key rotation for external integrations
+  - Network segmentation: IoT integration layer in isolated network segment
+  - Data anonymization: Vehicle identifiers hashed before storage
+  - CCTV privacy: Automatic blurring of faces/license plates, configurable retention policies  
 
 ---
 
@@ -331,12 +451,45 @@ Continuous activities: model retraining, stakeholder training, regulatory engage
 
 ## 9. Dependencies & Assumptions
 
+### 9.1 Technical Dependencies
 - Access to road network GIS data and incident logs for training and benchmarking.  
 - Partnerships with Base ecosystem for relayer/paymaster infrastructure and ongoing support.  
 - Telco agreements for SMS/USSD channels and zero-rated application access.  
 - Mapping licenses (Google Maps, Mapbox, or OpenStreetMap enhancements).  
 - Budget for AI data labeling, community engagement, and hardware for field teams.  
-- Cloud hosting approvals aligned with Kenyan public sector guidelines.  
+- Cloud hosting approvals aligned with Kenyan public sector guidelines.
+
+### 9.2 KeNHA Integration Dependencies
+- **RFID Infrastructure Access:**
+  - API access to KeNHA RFID reader network
+  - Vehicle registration database integration (privacy-compliant)
+  - Real-time data stream access (MQTT broker or REST API endpoints)
+  - Historical RFID log access for incident investigation
+
+- **CCTV System Integration:**
+  - API access to KeNHA CCTV management system
+  - Camera location and metadata database
+  - Video feed access protocols (ONVIF, RTSP, or proprietary API)
+  - Storage capacity for incident validation clips (minimum 30-day retention)
+
+- **Sensor Network Access:**
+  - Integration with KeNHA traffic monitoring sensors
+  - Weather station data feeds
+  - Road condition sensor access
+  - Real-time data stream protocols (MQTT, CoAP, or REST)
+
+- **Network Connectivity:**
+  - Dedicated network segment for IoT integration
+  - Low-latency connection to KeNHA data centers
+  - Redundant connectivity paths for high availability
+  - VPN or private network connection for secure data transmission
+
+### 9.3 Operational Assumptions
+- KeNHA systems (RFID, CCTV, sensors) are operational and accessible 95%+ uptime
+- Existing KeNHA infrastructure supports modern API protocols
+- KeNHA operational teams trained on integrated system workflows
+- Data sharing agreements in place for cross-system data correlation
+- Regulatory approval for vehicle identification correlation (privacy-compliant)  
 
 ---
 
@@ -358,12 +511,3 @@ Continuous activities: model retraining, stakeholder training, regulatory engage
 3. Who funds relayer infrastructure for gasless Base transactions long term, and what monitoring/reporting is needed?  
 4. How should incentives for high-quality reports be structured (recognition, airtime sponsorship, Base ecosystem partnerships)?  
 5. What data retention timelines and anonymization policies align with regulatory expectations?  
-
----
-
-## 12. Next Steps
-
-1. Circulate PRD to KeNHA leadership and emergency partners for validation of objectives, KPIs, and phased rollout.  
-2. Confirm Base blockchain partnership details, relayer/paymaster setup, and compliance requirements.  
-3. Prioritize MVP backlog, finalize budget allocations, and initiate detailed technical design sprints.  
-
