@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -8,9 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertCircle, Camera, MapPin, Upload, CheckCircle2 } from "lucide-react";
+import { AlertCircle, Camera, MapPin, Upload, CheckCircle2, X, Video, Image as ImageIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { incidentsAPI, CreateIncidentData } from "@/lib/incidents-api";
+import { mediaAPI } from "@/lib/media-api";
+
+interface FileWithPreview {
+  file: File;
+  preview: string;
+  type: 'photo' | 'video';
+}
 
 const ReportIncident = () => {
   const { toast } = useToast();
@@ -25,6 +32,12 @@ const ReportIncident = () => {
     description: "",
     anonymous: false
   });
+  const [selectedFiles, setSelectedFiles] = useState<FileWithPreview[]>([]);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   // Format coordinate to ensure no more than 6 decimal places and 9 digits total
   const formatCoordinate = (coord: number): number => {
@@ -53,6 +66,122 @@ const ReportIncident = () => {
       setLocationError("Geolocation is not supported by your browser.");
     }
   }, []);
+
+  // Cleanup preview URLs on unmount
+  useEffect(() => {
+    return () => {
+      selectedFiles.forEach((fileWithPreview) => {
+        URL.revokeObjectURL(fileWithPreview.preview);
+      });
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Handle file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const newFiles: FileWithPreview[] = [];
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'video/mp4', 'video/quicktime'];
+
+    Array.from(files).forEach((file) => {
+      if (file.size > maxSize) {
+        toast({
+          title: "File too large",
+          description: `${file.name} exceeds 10MB limit.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!allowedTypes.includes(file.type)) {
+        toast({
+          title: "Invalid file type",
+          description: `${file.name} is not a supported format (PNG, JPG, MP4).`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const preview = URL.createObjectURL(file);
+      const type = file.type.startsWith('image/') ? 'photo' : 'video';
+      newFiles.push({ file, preview, type });
+    });
+
+    setSelectedFiles((prev) => [...prev, ...newFiles]);
+  };
+
+  // Remove file
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles((prev) => {
+      const newFiles = [...prev];
+      URL.revokeObjectURL(newFiles[index].preview);
+      newFiles.splice(index, 1);
+      return newFiles;
+    });
+  };
+
+  // Start camera
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }, // Use back camera on mobile
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        setIsCapturing(true);
+        setShowCameraModal(true);
+      }
+    } catch (error) {
+      toast({
+        title: "Camera Access Denied",
+        description: "Please allow camera access to take photos.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Stop camera
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setIsCapturing(false);
+    setShowCameraModal(false);
+  };
+
+  // Capture photo from camera
+  const capturePhoto = () => {
+    if (!videoRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(video, 0, 0);
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+
+      const file = new File([blob], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      const preview = URL.createObjectURL(file);
+      setSelectedFiles((prev) => [...prev, { file, preview, type: 'photo' }]);
+      stopCamera();
+    }, 'image/jpeg', 0.9);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,7 +221,31 @@ const ReportIncident = () => {
         timestamp: new Date().toISOString(),
       };
 
-      await incidentsAPI.create(incidentData);
+      // Create incident first
+      const incident = await incidentsAPI.create(incidentData);
+
+      // Upload media files if any
+      if (selectedFiles.length > 0) {
+        try {
+          await Promise.all(
+            selectedFiles.map((fileWithPreview) =>
+              mediaAPI.upload({
+                incident_id: incident.incident_id,
+                asset_type: fileWithPreview.type,
+                file: fileWithPreview.file,
+              })
+            )
+          );
+        } catch (mediaError: any) {
+          // Log error but don't fail the incident submission
+          console.error("Media upload error:", mediaError);
+          toast({
+            title: "Incident Created",
+            description: "Your incident report was created, but some media files failed to upload.",
+            variant: "default",
+          });
+        }
+      }
 
       toast({
         title: "Incident Reported Successfully",
@@ -107,6 +260,12 @@ const ReportIncident = () => {
         description: "",
         anonymous: false
       });
+
+      // Clear files and previews
+      selectedFiles.forEach((fileWithPreview) => {
+        URL.revokeObjectURL(fileWithPreview.preview);
+      });
+      setSelectedFiles([]);
 
       // Navigate to incidents list
       setTimeout(() => {
@@ -268,17 +427,128 @@ const ReportIncident = () => {
               {/* Photo Upload */}
               <div className="space-y-2">
                 <Label htmlFor="photos">Photos / Videos (Optional)</Label>
-                <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer">
-                  <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-foreground mb-1">Click to upload or drag and drop</p>
-                  <p className="text-xs text-muted-foreground">PNG, JPG, MP4 up to 10MB each</p>
-                  <p className="text-xs text-muted-foreground mt-2">(Media upload will be implemented in a future update)</p>
-                  <Button type="button" variant="outline" size="sm" className="mt-4" disabled>
-                    <Camera className="w-4 h-4 mr-2" />
-                    Choose Files
-                  </Button>
+                <div className="space-y-4">
+                  <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors">
+                    <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-foreground mb-1">Click to upload or drag and drop</p>
+                    <p className="text-xs text-muted-foreground mb-4">PNG, JPG, MP4 up to 10MB each</p>
+                    <div className="flex gap-2 justify-center">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        id="photos"
+                        className="hidden"
+                        accept="image/jpeg,image/jpg,image/png,video/mp4,video/quicktime"
+                        multiple
+                        onChange={handleFileSelect}
+                        disabled={isSubmitting}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isSubmitting}
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        Choose Files
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={startCamera}
+                        disabled={isSubmitting || isCapturing}
+                      >
+                        <Camera className="w-4 h-4 mr-2" />
+                        Take Photo
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* File Previews */}
+                  {selectedFiles.length > 0 && (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      {selectedFiles.map((fileWithPreview, index) => (
+                        <div key={index} className="relative group">
+                          <div className="aspect-video rounded-lg overflow-hidden border border-border bg-muted">
+                            {fileWithPreview.type === 'photo' ? (
+                              <img
+                                src={fileWithPreview.preview}
+                                alt={`Preview ${index + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <video
+                                src={fileWithPreview.preview}
+                                className="w-full h-full object-cover"
+                                controls
+                              />
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveFile(index)}
+                            className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            disabled={isSubmitting}
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                          <div className="absolute bottom-2 left-2 flex items-center gap-1 text-xs bg-black/50 text-white px-2 py-1 rounded">
+                            {fileWithPreview.type === 'photo' ? (
+                              <ImageIcon className="w-3 h-3" />
+                            ) : (
+                              <Video className="w-3 h-3" />
+                            )}
+                            <span>
+                              {(fileWithPreview.file.size / 1024 / 1024).toFixed(2)} MB
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {/* Camera Modal */}
+              {showCameraModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+                  <div className="relative w-full max-w-2xl mx-4">
+                    <div className="bg-background rounded-lg p-4">
+                      <div className="relative">
+                        <video
+                          ref={videoRef}
+                          autoPlay
+                          playsInline
+                          className="w-full rounded-lg"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <div className="border-2 border-white rounded-lg w-[90%] aspect-video" />
+                        </div>
+                      </div>
+                      <div className="flex gap-4 mt-4 justify-center">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={stopCamera}
+                          disabled={isSubmitting}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={capturePhoto}
+                          disabled={isSubmitting}
+                        >
+                          <Camera className="w-4 h-4 mr-2" />
+                          Capture Photo
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Anonymous Toggle */}
               <div className="flex items-center gap-2 p-4 bg-muted/50 rounded-lg">
@@ -312,13 +582,19 @@ const ReportIncident = () => {
                   type="button"
                   variant="outline"
                   size="lg"
-                  onClick={() => setFormData({
-                    type: "",
-                    severity: "",
-                    road_name: "",
-                    description: "",
-                    anonymous: false
-                  })}
+                  onClick={() => {
+                    setFormData({
+                      type: "",
+                      severity: "",
+                      road_name: "",
+                      description: "",
+                      anonymous: false
+                    });
+                    selectedFiles.forEach((fileWithPreview) => {
+                      URL.revokeObjectURL(fileWithPreview.preview);
+                    });
+                    setSelectedFiles([]);
+                  }}
                   disabled={isSubmitting}
                 >
                   Clear

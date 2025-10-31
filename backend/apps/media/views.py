@@ -24,8 +24,27 @@ class MediaAssetViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(incident__incident_id=incident_id)
         return queryset
     
-    def perform_create(self, serializer):
-        incident_id = self.request.data.get('incident_id')
-        if incident_id:
-            incident = get_object_or_404(Incident, incident_id=incident_id)
-            serializer.save(incident=incident)
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        
+        # Get incident
+        incident_id = request.data.get('incident_id')
+        if not incident_id:
+            return Response(
+                {'error': 'incident_id is required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        incident = get_object_or_404(Incident, incident_id=incident_id)
+        
+        # Add incident to validated data
+        serializer.validated_data['incident'] = incident
+        
+        # Set uploader if authenticated
+        if request.user and request.user.is_authenticated:
+            serializer.validated_data['uploader'] = request.user
+        
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
