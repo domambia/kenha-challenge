@@ -24,7 +24,15 @@ import {
   Activity,
   Calendar,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Gauge,
+  Cloud,
+  Radio,
+  Thermometer,
+  Droplets,
+  Wind,
+  Eye,
+  Navigation
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { incidentsAPI, Incident } from "@/lib/incidents-api";
@@ -149,15 +157,65 @@ const Dashboard = () => {
     }
   ];
 
+  // Fetch traffic flow data
+  const { data: trafficFlowData, isLoading: trafficLoading } = useQuery({
+    queryKey: ['traffic-flow'],
+    queryFn: () => analyticsAPI.getTrafficFlow(24),
+    enabled: !!dashboardData,
+    retry: false,
+  });
+
+  // Fetch weather data
+  const { data: weatherData, isLoading: weatherLoading } = useQuery({
+    queryKey: ['weather'],
+    queryFn: () => analyticsAPI.getWeather(),
+    enabled: !!dashboardData,
+    retry: false,
+  });
+
+  // Fetch road conditions
+  const { data: roadConditionsData, isLoading: roadConditionsLoading } = useQuery({
+    queryKey: ['road-conditions'],
+    queryFn: () => analyticsAPI.getRoadConditions(),
+    enabled: !!dashboardData,
+    retry: false,
+  });
+
   const iotDevices = dashboardData?.iot_status ? [
-    { icon: <Camera className="w-5 h-5" />, label: "CCTV Cameras", value: dashboardData.iot_status.cctv_cameras.online.toString(), status: "Online" },
-    { icon: <MapPin className="w-5 h-5" />, label: "RFID Readers", value: dashboardData.iot_status.rfid_readers.online.toString(), status: "Online" },
-    { icon: <Activity className="w-5 h-5" />, label: "Traffic Sensors", value: dashboardData.iot_status.traffic_sensors.online.toString(), status: "Online" },
-    { icon: <Users className="w-5 h-5" />, label: "Active Responders", value: dashboardData.iot_status.active_responders.toString(), status: "Active" }
+    {
+      icon: <Camera className="w-5 h-5" />,
+      label: "CCTV Cameras",
+      value: `${dashboardData.iot_status.cctv_cameras.online}/${dashboardData.iot_status.cctv_cameras.total}`,
+      status: dashboardData.iot_status.cctv_cameras.online > 0 ? "Online" : "Offline",
+      total: dashboardData.iot_status.cctv_cameras.total,
+      online: dashboardData.iot_status.cctv_cameras.online
+    },
+    {
+      icon: <Radio className="w-5 h-5" />,
+      label: "RFID Readers",
+      value: `${dashboardData.iot_status.rfid_readers.online}/${dashboardData.iot_status.rfid_readers.total}`,
+      status: dashboardData.iot_status.rfid_readers.online > 0 ? "Online" : "Offline",
+      total: dashboardData.iot_status.rfid_readers.total,
+      online: dashboardData.iot_status.rfid_readers.online
+    },
+    {
+      icon: <Activity className="w-5 h-5" />,
+      label: "Traffic Sensors",
+      value: `${dashboardData.iot_status.traffic_sensors.online}/${dashboardData.iot_status.traffic_sensors.total}`,
+      status: dashboardData.iot_status.traffic_sensors.online > 0 ? "Online" : "Offline",
+      total: dashboardData.iot_status.traffic_sensors.total,
+      online: dashboardData.iot_status.traffic_sensors.online
+    },
+    {
+      icon: <Users className="w-5 h-5" />,
+      label: "Active Responders",
+      value: dashboardData.iot_status.active_responders.toString(),
+      status: "Active"
+    }
   ] : [
-    { icon: <Camera className="w-5 h-5" />, label: "CCTV Cameras", value: "0", status: "Offline" },
-    { icon: <MapPin className="w-5 h-5" />, label: "RFID Readers", value: "0", status: "Offline" },
-    { icon: <Activity className="w-5 h-5" />, label: "Traffic Sensors", value: "0", status: "Offline" },
+    { icon: <Camera className="w-5 h-5" />, label: "CCTV Cameras", value: "0/0", status: "Offline", total: 0, online: 0 },
+    { icon: <Radio className="w-5 h-5" />, label: "RFID Readers", value: "0/0", status: "Offline", total: 0, online: 0 },
+    { icon: <Activity className="w-5 h-5" />, label: "Traffic Sensors", value: "0/0", status: "Offline", total: 0, online: 0 },
     { icon: <Users className="w-5 h-5" />, label: "Active Responders", value: "0", status: "Inactive" }
   ];
 
@@ -271,7 +329,250 @@ const Dashboard = () => {
             ))}
           </div>
 
+          {/* Traffic & IoT Information Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            {/* Traffic Flow Summary */}
+            <Card className="p-6 bg-card border-border">
+              <div className="flex items-center gap-3 mb-4">
+                <Gauge className="w-6 h-6 text-primary" />
+                <h2 className="text-xl font-semibold text-foreground">Traffic Flow</h2>
+              </div>
+              {trafficLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                  <p className="text-muted-foreground">Loading traffic data...</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {dashboardData?.traffic_summary ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <div className="text-sm text-muted-foreground mb-1">Vehicles (24h)</div>
+                          <div className="text-2xl font-bold text-foreground">
+                            {dashboardData.traffic_summary.total_vehicles_24h.toLocaleString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-muted-foreground mb-1">Avg Speed</div>
+                          <div className="text-2xl font-bold text-foreground">
+                            {dashboardData.traffic_summary.avg_speed_kmh
+                              ? `${dashboardData.traffic_summary.avg_speed_kmh} km/h`
+                              : "N/A"}
+                          </div>
+                        </div>
+                      </div>
+                      {trafficFlowData?.timeline && trafficFlowData.timeline.length > 0 && (
+                        <div className="pt-4 border-t">
+                          <div className="text-sm text-muted-foreground mb-2">Recent Activity</div>
+                          <div className="space-y-2 max-h-32 overflow-y-auto">
+                            {trafficFlowData.timeline.slice(0, 5).map((item, idx) => (
+                              <div key={idx} className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">
+                                  {format(new Date(item.timestamp), 'HH:mm')}
+                                </span>
+                                <span className="font-medium">
+                                  {item.vehicle_count} vehicles
+                                  {item.avg_speed && ` @ ${item.avg_speed} km/h`}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No traffic data available
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
 
+            {/* IoT Device Status */}
+            <Card className="p-6 bg-card border-border">
+              <div className="flex items-center gap-3 mb-4">
+                <Activity className="w-6 h-6 text-primary" />
+                <h2 className="text-xl font-semibold text-foreground">IoT Device Status</h2>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                {iotDevices.map((device, index) => (
+                  <div key={index} className="p-3 rounded-lg bg-muted/50">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`text-${device.status === 'Online' || device.status === 'Active' ? 'primary' : 'muted-foreground'}`}>
+                        {device.icon}
+                      </div>
+                      <div className="text-sm font-medium text-foreground">{device.label}</div>
+                    </div>
+                    <div className="text-xl font-bold text-foreground mb-1">{device.value}</div>
+                    <div className={`text-xs ${device.status === 'Online' || device.status === 'Active'
+                        ? 'text-primary'
+                        : 'text-muted-foreground'
+                      }`}>
+                      {device.status}
+                      {device.total && device.total > 0 && (
+                        <span className="ml-1">
+                          ({Math.round((device.online / device.total) * 100)}%)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+
+          {/* Weather & Road Conditions Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            {/* Weather Conditions */}
+            <Card className="p-6 bg-card border-border">
+              <div className="flex items-center gap-3 mb-4">
+                <Cloud className="w-6 h-6 text-primary" />
+                <h2 className="text-xl font-semibold text-foreground">Weather Conditions</h2>
+              </div>
+              {weatherLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                  <p className="text-muted-foreground">Loading weather data...</p>
+                </div>
+              ) : weatherData && weatherData.conditions.length > 0 ? (
+                <div className="space-y-4">
+                  {weatherData.conditions.slice(0, 3).map((condition, idx) => (
+                    <div key={idx} className="p-3 rounded-lg bg-muted/50">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-foreground">
+                          Sensor {condition.sensor_id.split('-').pop()}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatTimeAgo(condition.timestamp)}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        {condition.temperature !== null && (
+                          <div className="flex items-center gap-2">
+                            <Thermometer className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-foreground">{condition.temperature}°C</span>
+                          </div>
+                        )}
+                        {condition.humidity !== null && (
+                          <div className="flex items-center gap-2">
+                            <Droplets className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-foreground">{condition.humidity}%</span>
+                          </div>
+                        )}
+                        {condition.rainfall !== null && (
+                          <div className="flex items-center gap-2">
+                            <Cloud className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-foreground">{condition.rainfall}mm</span>
+                          </div>
+                        )}
+                        {condition.wind_speed !== null && (
+                          <div className="flex items-center gap-2">
+                            <Wind className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-foreground">{condition.wind_speed} km/h</span>
+                          </div>
+                        )}
+                        {condition.visibility !== null && (
+                          <div className="flex items-center gap-2">
+                            <Eye className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-foreground">{condition.visibility} km</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {weatherData.conditions.length > 3 && (
+                    <div className="text-center text-sm text-muted-foreground">
+                      +{weatherData.conditions.length - 3} more sensors
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No weather data available
+                </div>
+              )}
+            </Card>
+
+            {/* Road Conditions */}
+            <Card className="p-6 bg-card border-border">
+              <div className="flex items-center gap-3 mb-4">
+                <Navigation className="w-6 h-6 text-primary" />
+                <h2 className="text-xl font-semibold text-foreground">Road Conditions</h2>
+              </div>
+              {roadConditionsLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                  <p className="text-muted-foreground">Loading road conditions...</p>
+                </div>
+              ) : roadConditionsData && roadConditionsData.conditions.length > 0 ? (
+                <div className="space-y-4">
+                  {roadConditionsData.conditions.slice(0, 3).map((condition, idx) => (
+                    <div
+                      key={idx}
+                      className={`p-3 rounded-lg ${condition.anomaly_detected
+                          ? 'bg-emergency/10 border border-emergency/20'
+                          : 'bg-muted/50'
+                        }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-foreground">
+                          Sensor {condition.sensor_id.split('-').pop()}
+                        </span>
+                        <span className={`text-xs px-2 py-1 rounded ${condition.condition === 'dry'
+                            ? 'bg-primary/20 text-primary'
+                            : condition.condition === 'wet'
+                              ? 'bg-trust/20 text-trust'
+                              : 'bg-warning/20 text-warning'
+                          }`}>
+                          {condition.condition}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        {condition.temperature !== null && (
+                          <div className="flex items-center gap-2">
+                            <Thermometer className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-foreground">{condition.temperature}°C</span>
+                          </div>
+                        )}
+                        {condition.surface_type && (
+                          <div className="flex items-center gap-2">
+                            <Navigation className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-foreground capitalize">{condition.surface_type}</span>
+                          </div>
+                        )}
+                        {condition.roughness !== null && (
+                          <div className="flex items-center gap-2">
+                            <Activity className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-foreground">Roughness: {condition.roughness}</span>
+                          </div>
+                        )}
+                        {condition.anomaly_detected && (
+                          <div className="col-span-2 flex items-center gap-2 text-emergency text-xs font-medium">
+                            <AlertCircle className="w-4 h-4" />
+                            Anomaly detected
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-2">
+                        {formatTimeAgo(condition.timestamp)}
+                      </div>
+                    </div>
+                  ))}
+                  {roadConditionsData.conditions.length > 3 && (
+                    <div className="text-center text-sm text-muted-foreground">
+                      +{roadConditionsData.conditions.length - 3} more sensors
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No road condition data available
+                </div>
+              )}
+            </Card>
+          </div>
 
           {/* Incident Heatmap */}
           <Card className="mt-6 p-6 bg-card border-border">
