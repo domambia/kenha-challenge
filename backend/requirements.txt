@@ -1,0 +1,79 @@
+# Django Core
+Django==5.0.1
+djangorestframework==3.14.0
+django-cors-headers==4.3.1
+django-filter==23.5
+
+# Database
+psycopg2-binary==2.9.9
+django-extensions==3.2.3
+
+# PostGIS Support
+# Note: PostGIS is installed at the database level, but we need GDAL
+# For macOS: brew install gdal
+# For Ubuntu: apt-get install gdal-bin python3-gdal
+# PostGIS will be used via django.contrib.gis when enabled
+
+# Authentication & Security
+djangorestframework-simplejwt==5.3.0
+django-otp==1.2.3
+django-allauth==0.57.0
+cryptography==41.0.7
+
+# Media & File Handling
+Pillow==10.1.0
+django-storages==1.14.2
+boto3==1.29.7
+python-magic==0.4.27
+
+# Caching & Task Queue
+redis==5.0.1
+celery==5.3.4
+django-celery-beat==2.5.0
+django-celery-results==2.5.0
+
+# Real-time (WebSocket)
+channels==4.0.0
+channels-redis==4.1.0
+
+# Geospatial
+django-geojson==3.2.0
+
+# API Documentation
+drf-yasg==1.21.7
+
+# Blockchain Integration
+web3==6.11.3
+eth-account==0.9.0
+
+# IoT Integration
+paho-mqtt==1.6.1
+aiocoap==1.0.1  # CoAP protocol support
+timescaledb==0.15.0  # PostgreSQL extension for time-series
+
+# Image Processing & AI
+opencv-python==4.8.1.78
+ffmpeg-python==0.2.0  # Video encoding/decoding
+onvif-zeep==0.2.12  # ONVIF protocol support
+ultralytics==8.0.0  # YOLOv8 for object detection
+numpy==1.26.2
+pandas==2.2.0  # Time-series analysis
+
+# Monitoring & Logging
+sentry-sdk==1.38.0
+
+# Utilities
+python-dateutil==2.8.2
+pytz==2023.3
+requests==2.31.0
+factory-boy==3.3.0  # Test fixtures
+
+# Development
+ipython==8.18.1
+python-dotenv==1.0.0
+
+# Testing
+pytest==7.4.3
+pytest-django==4.7.0
+pytest-cov==4.1.0
+

@@ -102,20 +102,62 @@ Successful implementations demonstrate the importance of:
 
 ### 3.2 Core System Components
 
-#### 3.2.1 Incident Reporting Module
-- **Multi-channel Reporting**: Mobile app, web portal, SMS, and voice calls
-- **Multimedia Capture**: Photo/video with automatic compression and geolocation
-- **Offline Capability**: Local storage when network unavailable
-- **Anonymous Reporting**: Privacy-protected incident submission
+#### 3.2.1 Citizen Incident Reporting Module
+
+The core of the eSafety platform is the citizen-powered mobile application that enables road users to report incidents and infrastructure vandalism using their smartphones.
+
+**Primary Reporting Capabilities:**
+- **Mobile Application (Flutter):** Primary reporting channel for iOS, Android, and web platforms
+- **GPS Location Capture (Mandatory):** Automatic latitude/longitude capture from phone GPS with manual override capability
+- **Photo Capture:** Up to 5 photos per incident using phone camera with GPS geotagging
+- **Video Recording:** Up to 120-second videos with embedded GPS coordinates and timestamps
+- **Incident Details:** Comprehensive description, severity classification, and metadata entry
+- **Offline Support:** Local storage when network unavailable with automatic sync when connected
+- **Anonymous Option:** Privacy-protected incident submission for users who prefer not to register
+
+**Report Types:**
+- Road accidents and collisions
+- Road hazards (potholes, debris, obstructions)
+- Infrastructure vandalism (damaged signs, stolen guardrails, graffiti)
+- Traffic violations and dangerous driving
+- Emergency situations requiring immediate response
+
+**Data Transmission:**
+- All incident data (GPS coordinates, photos, videos, descriptions) transmitted to centralized Django backend servers
+- Secure HTTPS transmission with encryption
+- Blockchain notarization for tamper-proof audit trail (gasless for users)
 
 #### 3.2.2 Blockchain Evidence Management
 Blockchain technology ensures secure, distributed and immutable forensic logs to manage evidence related to incidents by various stakeholders for investigation and settlements. <mcreference link="https://www.researchgate.net/publication/339657754_Accident_Detection_in_Internet_of_Vehicles_using_Blockchain_Technology" index="2">2</mcreference> Smart contracts specific to storage and access of evidence related to incidents are designed for automated processing and verification.
 
-#### 3.2.3 AI-Powered Verification System
-- **Automated Image Analysis**: AI-powered incident classification and verification
-- **Duplicate Detection**: Machine learning algorithms to identify similar reports
-- **Credibility Scoring**: User reputation system based on reporting history
-- **Real-time Validation**: GPS and timestamp verification
+#### 3.2.3 AI-Powered Photo & Video Analysis System
+
+The platform employs advanced artificial intelligence to analyze citizen-submitted photos and videos for automatic incident verification and classification.
+
+**Photo Analysis Capabilities:**
+- **Computer Vision Classification:** AI models automatically classify incident type from photos (accident, hazard, vandalism, infrastructure damage)
+- **Object Detection:** Identify vehicles, people, road infrastructure, debris, and damage indicators
+- **Damage Assessment:** Quantify extent of damage and estimate repair urgency
+- **GPS Verification:** Cross-check GPS coordinates embedded in photo EXIF data with reported location
+- **Quality Scoring:** Assess image clarity, usability, and completeness
+
+**Video Analysis Capabilities:**
+- **Temporal Event Detection:** Frame-by-frame analysis to detect incidents as they occur
+- **Motion Tracking:** Track objects and movements throughout video sequence
+- **Sequence Reconstruction:** Reconstruct incident timeline from video evidence
+- **Event Classification:** Identify collisions, obstructions, vandalism activities
+- **Privacy Protection:** Automatic face and license plate detection with blurring/redaction
+
+**AI Model Architecture:**
+- **Image Models:** YOLOv8 for object detection, ResNet/EfficientNet for classification
+- **Video Models:** Temporal CNNs for sequence analysis and event detection
+- **Training Pipeline:** Continuous improvement with human-verified incident reports
+- **Model Updates:** Regular retraining cycles to improve accuracy and adapt to new incident patterns
+
+**Integration with Multi-source Validation:**
+- AI analysis results combined with RFID, CCTV, and sensor data for comprehensive confidence scoring
+- AI-generated classifications verified against CCTV footage and sensor anomalies
+- Machine learning models improve validation accuracy over time with feedback loop
 
 #### 3.2.4 Emergency Response Coordination
 - **Automated Dispatch**: Smart contract-triggered emergency service alerts
@@ -420,21 +462,58 @@ The platform maintains a configurable dispatch queue that enables: <mcreference 
 ### 9.1 Citizen Reporter Interface
 
 #### 9.1.1 Mobile Application Workflow
-The mobile application provides an intuitive, streamlined interface for incident reporting:
+The mobile application provides an intuitive, streamlined interface for citizen incident reporting with mandatory GPS and photo/video capture:
 
-**Quick Report Mode:**
-- **One-Tap Emergency**: Single button for immediate incident reporting
-- **Auto-Location**: GPS-based location capture with manual adjustment
-- **Photo Capture**: Integrated camera with automatic compression
-- **Voice Notes**: Audio recording for additional incident details
-- **Offline Storage**: Local data storage when network unavailable
+**Reporting Workflow:**
 
-**Detailed Report Mode:**
-- **Incident Categories**: Dropdown selection (accident, hazard, breakdown, infrastructure)
-- **Severity Assessment**: User-guided severity classification
-- **Multiple Media**: Photo and video capture with metadata
-- **Witness Information**: Optional contact details for follow-up
-- **Anonymous Option**: Privacy-protected reporting capability
+1. **Launch & Location:**
+   - User opens eSafety mobile app
+   - App requests GPS permission
+   - **Automatic GPS Capture:** Current latitude/longitude captured from phone GPS
+   - Location displayed on map for user verification
+   - Manual adjustment allowed if location needs correction
+   - GPS accuracy indicator shown to user
+
+2. **Incident Type Selection:**
+   - Road accident/collision
+   - Road hazard (potholes, debris, obstructions)
+   - Infrastructure vandalism (damaged signs, guardrails, stolen equipment)
+   - Traffic violation
+   - Emergency situation
+
+3. **Photo & Video Capture (Mandatory):**
+   - **Photo Capture:**
+     - Integrated camera opens for immediate capture
+     - Up to 5 photos per incident
+     - Gallery selection option available
+     - GPS coordinates automatically embedded in photo EXIF data
+     - Preview before finalizing
+     - Automatic compression for network efficiency
+   - **Video Recording (Optional but Recommended):**
+     - Video recorder integrated in app
+     - Up to 120-second recording
+     - GPS timestamp embedded in video
+     - Compression and encoding optimization
+   - **Audio Notes (Optional):** Voice description recording
+
+4. **Incident Details:**
+   - **Description:** Free-text entry (minimum 20 characters)
+   - **Severity:** User-selected level (Critical, High, Medium, Low)
+   - **Timestamp:** Auto-captured, user adjustable
+   - **Additional Metadata:** Weather, vehicles involved, injuries, etc.
+
+5. **Submission to Centralized Servers:**
+   - All data (GPS coordinates, photos, videos, text) sent to Django backend
+   - Upload progress indicator
+   - Offline queue if network unavailable
+   - Confirmation with unique incident ID
+   - Blockchain notarization (transparent to user)
+
+6. **Status Tracking:**
+   - Real-time status updates via push notifications
+   - Incident timeline view
+   - Responder tracking (when authorized)
+   - Resolution confirmation
 
 #### 9.1.2 Web Portal Features
 - **Dashboard View**: Real-time incident map and status updates
@@ -444,20 +523,51 @@ The mobile application provides an intuitive, streamlined interface for incident
 
 ### 9.2 Emergency Responder Interface
 
-#### 9.2.1 Dispatch Dashboard
-The emergency responder interface provides comprehensive incident management capabilities:
+#### 9.2.1 Centralized Dashboard Access
+
+The eSafety platform provides a unified web-based dashboard accessible to all authorized users through centralized servers. All users access the same dashboard infrastructure with role-based permissions controlling data visibility and actions.
+
+**Dashboard Users:**
+
+1. **KeNHA HQ (Platform Owner):**
+   - Full system access and oversight
+   - All incidents visible with complete data
+   - System configuration and management
+   - Analytics and reporting tools
+
+2. **Police Services:**
+   - Incident assignments and dispatch queue
+   - Full access to citizen photos, videos, and GPS coordinates
+   - CCTV feed integration for validation
+   - Enforcement action logging
+
+3. **Emergency Services (Ambulance, Fire, Towing):**
+   - Emergency incident queue
+   - Access to incident photos/videos for scene assessment
+   - GPS navigation to precise incident location
+   - Resource coordination tools
+
+4. **Other Authorized Users:**
+   - Maintenance crews: Infrastructure repair assignments with photos/GPS
+   - Analysts: Anonymized data and trends
+   - Policy makers: Aggregated safety statistics
+
+**Dashboard Features (All Users):**
 
 **Real-time Incident Queue:**
-- **Priority Sorting**: Incidents organized by severity and urgency
-- **Geographic View**: Map-based incident visualization
+- **Priority Sorting**: Incidents organized by severity, urgency, and AI confidence scores
+- **Geographic View**: Interactive map showing all incidents with GPS markers
+- **Photo/Video Viewer**: Direct viewing of citizen-submitted photos and videos in dashboard
+- **GPS Visualization**: Precise location display with satellite/aerial imagery
 - **Resource Status**: Live tracking of available personnel and equipment
 - **Communication Hub**: Integrated messaging and coordination tools
 
 **Assignment and Tracking:**
 - **One-Click Dispatch**: Immediate resource assignment to incidents
-- **Route Optimization**: AI-powered routing for fastest response
+- **Route Optimization**: AI-powered routing using GPS coordinates
 - **Status Updates**: Real-time progress tracking and reporting
 - **Multi-agency Coordination**: Cross-department communication and collaboration
+- **Evidence Review**: Access to all photos, videos, and GPS data from citizen reports
 
 #### 9.2.2 Field Operations Interface
 - **Mobile Updates**: On-scene status reporting from mobile devices
